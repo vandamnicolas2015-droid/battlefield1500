@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#22291e">
+  <meta name="description" content="Battlefield 1500 is a browser-based medieval archery game with bots, local duels, online battles, and a shared lobby.">
+  <meta property="og:title" content="Battlefield 1500 — Medieval Archery Game">
+  <meta property="og:description" content="Enter the battlefield, wield your bow, and join friends online.">
+  <meta property="og:type" content="website">
+  <title>Battlefield 1500 — Medieval Archery Game</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="game-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">B</div>
+        <div>
+          <strong>BATTLEFIELD 1500</strong>
+          <span>Medieval Archery</span>
+        </div>
+      </div>
+      <div id="scoreboard" class="scoreboard" aria-label="Match score and time">
+        <div class="blue-score"><b id="blueScore">0</b> BLUE</div>
+        <div id="timer" class="timer">60</div>
+        <div class="red-score">RED <b id="redScore">0</b></div>
+      </div>
+      <button id="pauseButton" class="icon-button" type="button" aria-label="Pause game">Ⅱ</button>
+    </header>
+
+    <section class="arena-wrap" aria-label="Game arena">
+      <canvas id="gameCanvas" width="960" height="540" tabindex="0" aria-label="Battlefield game canvas"></canvas>
+
+      <div id="battleMapBadge" class="battle-map-badge hidden"></div>
+      <div id="publicLobbyBadge" class="public-lobby-badge hidden">
+        <strong>MEETING GREEN</strong>
+        <span id="onlineCount">0 SOLDIERS</span>
+        <button id="leavePublicLobbyButton" type="button">LEAVE LOBBY</button>
+      </div>
+
+      <div id="gameChat" class="game-chat hidden">
+        <button id="gameChatToggle" class="chat-toggle" type="button" aria-expanded="true">CHAT</button>
+        <div id="gameChatPanel" class="chat-box">
+          <div class="chat-heading">BATTLE CHAT</div>
+          <div id="gameChatMessages" class="chat-messages" aria-live="polite"></div>
+          <form id="gameChatForm" class="chat-form">
+            <label class="sr-only" for="gameChatInput">Message</label>
+            <input id="gameChatInput" type="text" maxlength="240" placeholder="Write a message..." autocomplete="off">
+            <button class="secondary-button" type="submit">SEND</button>
+          </form>
+        </div>
+      </div>
+
+      <div id="touchControls" class="touch-controls hidden" aria-label="Touch controls">
+        <div class="touch-dpad">
+          <button type="button" data-key="w" aria-label="Move up">↑</button>
+          <button type="button" data-key="a" aria-label="Move left">←</button>
+          <button type="button" data-key="s" aria-label="Move down">↓</button>
+          <button type="button" data-key="d" aria-label="Move right">→</button>
+        </div>
+        <button id="touchShoot" class="touch-shoot" type="button">SHOOT</button>
+      </div>
+
+      <section id="menu" class="overlay">
+        <div class="panel">
+          <p class="eyebrow">A BATTLE FOR THE OLD WORLD</p>
+          <h1>Battlefield <em>1500</em></h1>
+          <p class="subtitle">Take up your bow and enter the field.</p>
+
+          <div class="mode-grid" role="group" aria-label="Choose a game mode">
+            <button id="botMode" class="mode-card selected" type="button">
+              <span class="mode-icon" aria-hidden="true">⚔</span>
+              <strong>BATTLE THE BOTS</strong>
+              <small>Fight computer archers</small>
+            </button>
+            <button id="localMode" class="mode-card" type="button">
+              <span class="mode-icon" aria-hidden="true">♟</span>
+              <strong>LOCAL DUEL</strong>
+              <small>Two players, one device</small>
+            </button>
+            <button id="onlineMode" class="mode-card" type="button">
+              <span class="mode-icon" aria-hidden="true">⌂</span>
+              <strong>PRIVATE BATTLE</strong>
+              <small>Host or join with a code</small>
+            </button>
+            <button id="publicLobbyMode" class="mode-card" type="button">
+              <span class="mode-icon" aria-hidden="true">✦</span>
+              <strong>PUBLIC LOBBY</strong>
+              <small>Meet and chat with everyone</small>
+            </button>
+          </div>
+
+          <div id="mapPicker" class="map-picker">
+            <div class="map-picker-title">CHOOSE A BATTLEFIELD <span>Private and offline matches</span></div>
+            <div class="map-options" role="group" aria-label="Choose a map">
+              <button class="map-option selected" type="button" data-map="frontier">
+                <span class="map-swatch frontier-swatch" aria-hidden="true"></span>
+                <strong>FRONTIER FIELD</strong>
+              </button>
+              <button class="map-option" type="button" data-map="village">
+                <span class="map-swatch village-swatch" aria-hidden="true"></span>
+                <strong>GREENWOOD VILLAGE</strong>
+              </button>
+              <button class="map-option" type="button" data-map="ruins">
+                <span class="map-swatch ruins-swatch" aria-hidden="true"></span>
+                <strong>OLD KEEP RUINS</strong>
+              </button>
+            </div>
+          </div>
+
+          <button id="startButton" class="primary-button" type="button">ENTER ARENA <span>➜</span></button>
+          <div class="controls">
+            <span><kbd class="key blue-key">W A S D</kbd> Move</span>
+            <span><kbd class="key">Mouse</kbd> Aim</span>
+            <span><kbd class="key">LMB</kbd> Shoot</span>
+            <span id="playerTwoControls" style="visibility:hidden"><kbd class="key red-key">Arrows</kbd> Player 2</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="lobbyOverlay" class="overlay hidden">
+        <div class="panel lobby-panel">
+          <p class="eyebrow">GATHER YOUR COMPANY</p>
+          <h2>Battle <em>Lobby</em></h2>
+          <p id="lobbyDescription" class="subtitle">Create a room or enter a friend’s room code.</p>
+
+          <div id="roomConnectForm" class="room-connect">
+            <label id="playerNameLabel" for="playerName">Soldier name
+              <input id="playerName" type="text" maxlength="18" placeholder="Your name" autocomplete="nickname">
+            </label>
+            <div id="privateRoomControls" class="private-room-controls">
+              <button id="createRoomButton" class="primary-button" type="button">CREATE ROOM</button>
+              <label for="roomCodeInput">Room code
+                <input id="roomCodeInput" type="text" maxlength="5" placeholder="ABCDE" autocomplete="off">
+              </label>
+              <button id="joinRoomButton" class="secondary-button" type="button">JOIN ROOM</button>
+            </div>
+            <button id="publicJoinButton" class="primary-button hidden" type="button">JOIN PUBLIC LOBBY</button>
+          </div>
+
+          <p id="connectionError" class="connection-error" role="status" aria-live="polite"></p>
+
+          <div id="roomSession" class="room-session hidden">
+            <div class="room-heading">
+              <div>ROOM CODE <strong><span id="roomCodeLabel"></span></strong></div>
+              <button id="copyRoomButton" class="secondary-button" type="button">COPY INVITE</button>
+            </div>
+            <p id="lobbyStatus" class="lobby-status">Waiting for another soldier to join...</p>
+            <div id="lobbyPlayers" class="lobby-players"></div>
+            <button id="leaveRoomButton" class="secondary-button" type="button">LEAVE ROOM</button>
+          </div>
+
+          <div class="chat-box lobby-chat">
+            <div class="chat-heading">LOBBY CHAT</div>
+            <div id="lobbyChatMessages" class="chat-messages" aria-live="polite"></div>
+            <form id="lobbyChatForm" class="chat-form">
+              <label class="sr-only" for="lobbyChatInput">Message</label>
+              <input id="lobbyChatInput" type="text" maxlength="240" placeholder="Write a message..." autocomplete="off">
+              <button class="secondary-button" type="submit">SEND</button>
+            </form>
+          </div>
+          <button id="lobbyBackButton" class="text-button" type="button">Back to the main menu</button>
+        </div>
+      </section>
+
+      <section id="pauseOverlay" class="overlay hidden">
+        <div class="panel small-panel">
+          <p class="eyebrow">THE BATTLE IS PAUSED</p>
+          <h2>Hold Your Ground</h2>
+          <button id="resumeButton" class="primary-button" type="button">RESUME</button>
+          <button id="menuButton" class="text-button" type="button">Return to menu</button>
+        </div>
+      </section>
+
+      <section id="gameOver" class="overlay hidden">
+        <div class="panel small-panel">
+          <p class="eyebrow">THE DUST SETTLES</p>
+          <h2 id="winnerText">BLUE WINS</h2>
+          <p id="finalScore" class="subtitle">BLUE 0 — 0 RED</p>
+          <button id="againButton" class="primary-button" type="button">FIGHT AGAIN</button>
+          <button id="gameMenuButton" class="text-button" type="button">Return to menu</button>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script src="javscript.js"></script>
+</body>
+</html>
