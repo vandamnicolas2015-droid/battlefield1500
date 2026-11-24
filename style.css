@@ -1,0 +1,146 @@
+:root { --blue: #81a9ba; --red: #b96a58; --gold: #c9ad6b; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(circle at 50% 10%, #45533a 0, #22291e 48%, #10140f 100%); color: #eee2c3; font-family: 'Cinzel', Georgia, serif; overflow: hidden; }
+button { font: inherit; }
+.game-shell { width: min(1100px, 96vw); }
+.game-shell.public-lobby #scoreboard, .game-shell.public-lobby #pauseButton { display: none; }
+.game-shell.public-lobby .topbar { grid-template-columns: 1fr; }
+.game-shell.public-lobby .touch-shoot { display: none; }
+.topbar { height: 74px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; border: 1px solid #756548; border-bottom: 0; background: rgba(31, 34, 24, .98); padding: 0 18px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark { width: 40px; height: 40px; display: grid; place-items: center; border: 2px solid var(--gold); color: var(--gold); transform: skew(-8deg); font-family: 'IM Fell English SC', Georgia, serif; font-size: 24px; }
+.brand strong { display: block; white-space: nowrap; letter-spacing: 1px; font-size: 13px; }
+.brand span { display: block; white-space: nowrap; color: #b1a27d; text-transform: uppercase; font-size: 9px; letter-spacing: 1px; }
+.scoreboard { min-width: 320px; display: grid; grid-template-columns: 1fr 58px 1fr; align-items: center; text-align: center; font-size: 12px; letter-spacing: 1px; }
+.scoreboard b { font-family: 'IM Fell English SC', Georgia, serif; font-size: 24px; margin-right: 7px; }
+.blue-score { color: var(--blue); }
+.red-score { color: var(--red); }
+.red-score b { margin: 0 0 0 7px; }
+.timer { width: 58px; height: 58px; display: grid; place-items: center; margin: auto; border: 1px solid #887751; border-radius: 50%; background: #363729; color: #eee2c3; font-family: 'IM Fell English SC', Georgia, serif; font-size: 21px; }
+.icon-button { justify-self: end; width: 38px; height: 38px; border: 1px solid #776849; background: #343528; color: #e0d2af; cursor: pointer; }
+.arena-wrap { position: relative; width: 100%; aspect-ratio: 16 / 9; border: 1px solid #756548; background: #526b42; overflow: hidden; }
+canvas { width: 100%; height: 100%; display: block; }
+.overlay { position: absolute; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: 12px 0; background: rgba(22, 24, 17, .78); backdrop-filter: blur(3px); }
+.overlay.hidden { display: none; }
+.panel { width: min(620px, 86%); margin: auto; text-align: center; }
+.eyebrow { color: var(--gold); letter-spacing: 5px; font-size: 11px; margin: 0 0 8px; }
+h1 { margin: 0; font-family: 'IM Fell English SC', Georgia, serif; font-size: clamp(38px, 6vw, 70px); line-height: 1; letter-spacing: 2px; text-shadow: 0 5px 25px rgba(0,0,0,.7); }
+h1 em { color: #c39051; font-style: normal; }
+.subtitle { color: #d0c4a4; margin: 12px 0 22px; }
+.mode-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.mode-card { min-height: 100px; border: 1px solid #675b43; background: rgba(48, 47, 35, .94); color: #e5d9bb; cursor: pointer; display: grid; grid-template-columns: 38px 1fr; grid-template-rows: 1fr 1fr; text-align: left; padding: 14px; transition: .16s ease; }
+.mode-card.selected { border-color: var(--gold); background: linear-gradient(135deg, rgba(180,151,91,.2), rgba(48,47,35,.96)); box-shadow: inset 0 0 22px rgba(201,173,107,.08); }
+.mode-card strong { align-self: end; letter-spacing: 1px; font-size: 12px; white-space: nowrap; }
+.mode-card small { align-self: start; color: #b3a783; margin-top: 5px; }
+.mode-icon { grid-row: 1 / 3; align-self: center; width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid currentColor; color: var(--gold); }
+.map-picker { margin-top: 12px; }
+.map-picker-title { display: flex; justify-content: space-between; gap: 8px; margin: 0 0 6px; color: var(--gold); font-size: 9px; font-weight: 700; letter-spacing: 1px; }
+.map-picker-title span { color: #b6aa89; font-size: 8px; font-weight: 500; }
+.map-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.map-option { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 38px; padding: 5px 7px; border: 1px solid #625940; background: rgba(48, 47, 35, .9); color: #e5d9bb; text-align: left; cursor: pointer; }
+.map-option.selected { border-color: var(--gold); background: rgba(155, 124, 69, .25); }
+.map-option strong { overflow: hidden; font-size: 8px; letter-spacing: .5px; text-overflow: ellipsis; white-space: nowrap; }
+.map-swatch { flex: 0 0 25px; height: 25px; border: 1px solid #9a8b62; background-color: #526b42; }
+.frontier-swatch { background-image: linear-gradient(90deg, transparent 46%, #857b64 46% 54%, transparent 54%), linear-gradient(0deg, transparent 45%, #938870 45% 55%, transparent 55%); }
+.village-swatch { background-color: #64734a; background-image: linear-gradient(0deg, transparent 42%, #aa8d5f 42% 58%, transparent 58%), linear-gradient(90deg, transparent 48%, #87765a 48% 55%, transparent 55%); }
+.ruins-swatch { background-color: #596344; background-image: linear-gradient(135deg, transparent 40%, #938870 41% 52%, transparent 53%), linear-gradient(45deg, transparent 30%, #756b55 31% 43%, transparent 44%); }
+.primary-button { width: 100%; height: 54px; margin-top: 12px; border: 1px solid #d5bb78; background: linear-gradient(90deg, #987343, #c09a58); color: #201b12; font-weight: 800; letter-spacing: 3px; cursor: pointer; }
+.primary-button span { float: right; margin-right: 20px; }
+.controls { display: flex; justify-content: center; gap: 26px; margin-top: 16px; color: #b9ad8e; font-size: 11px; }
+.key { display: inline-block; border: 1px solid #817451; border-radius: 3px; padding: 3px 6px; color: #eee2c3; }
+.blue-key { border-bottom-color: var(--blue); }
+.red-key { border-bottom-color: var(--red); }
+.small-panel { max-width: 420px; }
+.small-panel h2 { font-family: 'IM Fell English SC', Georgia, serif; font-size: 38px; margin: 0; }
+.text-button { margin-top: 12px; border: 0; background: transparent; color: #c2b591; cursor: pointer; text-decoration: underline; }
+.hidden { display: none !important; }
+.lobby-panel { width: min(780px, 94%); max-height: 94%; overflow-y: auto; padding: 18px; border: 1px solid #80714c; background: rgba(35, 36, 27, .98); }
+.lobby-panel h2 { margin: 0; font-family: 'IM Fell English SC', Georgia, serif; font-size: clamp(30px, 5vw, 46px); }
+.lobby-panel h2 em { color: #c39051; font-style: normal; }
+.lobby-panel .subtitle { margin: 6px 0 18px; }
+.room-connect { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 10px; text-align: left; }
+.private-room-controls { display: contents; }
+.room-connect #playerName { grid-column: 1 / -1; }
+.room-connect #publicJoinButton { grid-column: 1 / -1; width: 100%; }
+.room-connect label { display: grid; gap: 5px; color: #d0c4a4; font-size: 12px; }
+.room-connect input, .chat-form input { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid #776849; border-radius: 2px; background: #22251c; color: #f0e5c7; font: inherit; outline: none; }
+.room-connect input:focus, .chat-form input:focus { border-color: var(--gold); }
+.room-connect .primary-button, .room-connect .secondary-button { width: auto; min-width: 145px; height: 42px; margin: 0; padding: 0 14px; font-size: 11px; }
+.secondary-button { min-height: 38px; padding: 8px 12px; border: 1px solid #86764f; border-radius: 2px; background: #39382a; color: #eee2c3; font-weight: 700; letter-spacing: 1px; cursor: pointer; }
+.connection-error { min-height: 18px; margin: 10px 0; color: #e1947b; font-size: 12px; }
+.room-session { text-align: left; }
+.room-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #685d43; background: #2d3025; padding: 10px 14px; }
+.room-heading strong { color: var(--gold); letter-spacing: 2px; }
+.room-heading strong span { color: #f1e4c4; }
+.lobby-status { margin: 0 0 4px; color: #c7c09f; font-size: 12px; }
+.lobby-players { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 0; }
+.lobby-player { padding: 7px 10px; border: 1px solid #665b41; background: #333428; color: #e8ddc0; font-size: 12px; }
+.chat-box { border: 1px solid #685d43; background: rgba(30, 31, 24, .98); }
+.chat-heading { padding: 8px 10px; border-bottom: 1px solid #574f3a; color: var(--gold); font-size: 11px; font-weight: 700; letter-spacing: 2px; }
+.chat-messages { display: flex; flex-direction: column; gap: 5px; height: 160px; overflow-y: auto; padding: 9px; color: #e4d8b8; font: 12px/1.45 'Cinzel', Georgia, serif; }
+.chat-message { overflow-wrap: anywhere; }
+.chat-message strong { color: var(--gold); }
+.chat-system { color: #b7ad8e; font-style: italic; }
+.chat-form { display: flex; gap: 6px; padding: 7px; border-top: 1px solid #574f3a; }
+.chat-form input { padding: 8px; font-size: 12px; }
+.chat-form .secondary-button { min-height: 34px; font-size: 10px; }
+.lobby-chat { margin-bottom: 6px; }
+.lobby-chat .chat-messages { height: 130px; }
+.game-chat { position: absolute; z-index: 3; top: 12px; right: 12px; width: min(300px, 70%); }
+.chat-toggle { display: block; margin-left: auto; padding: 8px 12px; border: 1px solid #817451; background: rgba(37, 39, 29, .95); color: #eee2c3; font: 700 11px 'Cinzel', Georgia, serif; letter-spacing: 1px; cursor: pointer; }
+.game-chat .chat-box { margin-top: 5px; }
+.game-chat .chat-messages { height: 135px; }
+.public-lobby-badge { position: absolute; z-index: 1; top: 12px; left: 12px; display: flex; flex-direction: column; gap: 2px; padding: 8px 11px; border: 1px solid rgba(201, 173, 107, .8); background: rgba(31, 34, 24, .85); color: #eee2c3; font-size: 10px; letter-spacing: 1px; }
+.public-lobby-badge strong { color: var(--gold); }
+.public-lobby-badge span { font-size: 9px; }
+.public-lobby-badge button { margin-top: 5px; border: 1px solid #817451; background: #39382a; color: #eee2c3; padding: 4px 6px; font-size: 9px; letter-spacing: 1px; cursor: pointer; }
+.battle-map-badge { position: absolute; z-index: 1; top: 12px; left: 12px; padding: 7px 10px; border: 1px solid rgba(201, 173, 107, .7); background: rgba(31, 34, 24, .8); color: #eee2c3; font-size: 10px; letter-spacing: 1px; pointer-events: none; }
+.touch-controls { display: none; position: absolute; z-index: 2; inset: auto 14px 14px; align-items: end; justify-content: space-between; pointer-events: none; touch-action: none; }
+.touch-dpad { display: grid; grid-template-columns: repeat(3, 42px); grid-template-rows: repeat(2, 42px); gap: 4px; pointer-events: auto; }
+.touch-dpad button, .touch-shoot { border: 1px solid rgba(222, 200, 145, .7); border-radius: 7px; background: rgba(35, 37, 28, .76); color: #f0e4c4; font: 700 17px 'Cinzel', Georgia, serif; touch-action: none; user-select: none; }
+.touch-dpad button:nth-child(1) { grid-column: 2; }
+.touch-dpad button:nth-child(2) { grid-column: 1; grid-row: 2; }
+.touch-dpad button:nth-child(3) { grid-column: 2; grid-row: 2; }
+.touch-dpad button:nth-child(4) { grid-column: 3; grid-row: 2; }
+.touch-shoot { width: 76px; height: 76px; border-radius: 50%; font-size: 12px; pointer-events: auto; }
+@media (pointer: coarse) { .touch-controls:not(.hidden) { display: flex; } }
+@media (max-width: 700px) {
+  body { min-height: 100svh; overflow: auto; place-items: start center; }
+  .game-shell { width: 100vw; }
+  .topbar { height: 62px; grid-template-columns: auto 1fr auto; padding: 0 8px; }
+  .brand { gap: 6px; }
+  .brand-mark { width: 32px; height: 32px; font-size: 19px; }
+  .brand strong { font-size: 9px; letter-spacing: 0; }
+  .brand span { font-size: 7px; letter-spacing: 0; }
+  .scoreboard { min-width: 0; grid-template-columns: 1fr 42px 1fr; font-size: 9px; letter-spacing: 0; }
+  .scoreboard b { font-size: 17px; margin-right: 2px; }
+  .red-score b { margin-left: 2px; }
+  .timer { width: 38px; height: 38px; font-size: 16px; }
+  .icon-button { width: 32px; height: 32px; }
+  .arena-wrap { width: 100vw; aspect-ratio: 16 / 11; }
+  .panel { width: 94%; }
+  .overlay { overflow-y: auto; padding: 10px 0; align-items: start; }
+  .panel { margin: auto; }
+  .eyebrow { letter-spacing: 2px; }
+  .mode-grid { gap: 5px; }
+  .mode-card { min-height: 84px; padding: 7px; grid-template-columns: 25px 1fr; }
+  .mode-icon { width: 24px; height: 24px; font-size: 12px; }
+  .mode-card strong { font-size: 9px; letter-spacing: 0; }
+  .mode-card small { font-size: 8px; }
+  .map-picker { margin-top: 7px; }
+  .map-picker-title { font-size: 8px; letter-spacing: 0; }
+  .map-picker-title span { font-size: 7px; }
+  .map-options { gap: 4px; }
+  .map-option { flex-direction: column; justify-content: center; gap: 3px; min-height: 48px; padding: 3px; }
+  .map-swatch { flex-basis: auto; width: 25px; height: 20px; }
+  .map-option strong { max-width: 100%; font-size: 7px; letter-spacing: 0; }
+  .primary-button { height: 44px; font-size: 12px; letter-spacing: 1px; }
+  .controls { display: none; }
+  .lobby-panel { padding: 12px; }
+  .room-connect { grid-template-columns: 1fr auto; gap: 8px 5px; }
+  .room-connect .primary-button, .room-connect .secondary-button { min-width: 95px; padding: 0 8px; font-size: 9px; }
+  .game-chat { top: 5px; right: 5px; width: min(270px, 76%); }
+  .touch-controls { inset: auto 8px 8px; }
+  .touch-dpad { grid-template-columns: repeat(3, 34px); grid-template-rows: repeat(2, 34px); gap: 3px; }
+  .touch-shoot { width: 62px; height: 62px; }
+}
