@@ -1,0 +1,17 @@
+{
+  "name": "battlefield-1500",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A browser-playable medieval battle game with online rooms and chat",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js && node --check javascript.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
