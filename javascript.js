@@ -53,6 +53,7 @@ async function refreshAccountState() {
 }
 
 async function submitAccountAction(action) {
+  if (!accountStateReady) await refreshAccountState();
   const username = $('accountUsername').value.trim();
   const password = $('accountPassword').value;
   $('accountStatus').textContent = action === 'register' ? 'Creating account...' : 'Signing in...';
