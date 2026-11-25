@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=IM+Fell+English+SC&display=swap');
+
 :root { --blue: #81a9ba; --red: #b96a58; --gold: #c9ad6b; }
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(circle at 50% 10%, #45533a 0, #22291e 48%, #10140f 100%); color: #eee2c3; font-family: 'Cinzel', Georgia, serif; overflow: hidden; }
@@ -58,6 +60,19 @@ h1 em { color: #c39051; font-style: normal; }
 .lobby-panel h2 { margin: 0; font-family: 'IM Fell English SC', Georgia, serif; font-size: clamp(30px, 5vw, 46px); }
 .lobby-panel h2 em { color: #c39051; font-style: normal; }
 .lobby-panel .subtitle { margin: 6px 0 18px; }
+.account-panel { margin-bottom: 12px; padding: 10px; border: 1px solid #685d43; background: rgba(30, 31, 24, .72); text-align: left; }
+.account-status { min-height: 18px; margin: 6px 0; color: #c7c09f; font-size: 11px; }
+.account-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.account-form label { display: grid; gap: 5px; color: #d0c4a4; font-size: 11px; }
+.account-form input { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid #776849; border-radius: 2px; background: #22251c; color: #f0e5c7; font: inherit; outline: none; }
+.account-form input:focus { border-color: var(--gold); }
+.account-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
+.account-actions .secondary-button { min-height: 34px; font-size: 10px; }
+.leaderboard-button { display: block; width: min(360px, 100%); margin: 8px auto 0; }
+.leaderboard-panel { max-height: 90%; overflow-y: auto; padding: 20px; border: 1px solid #80714c; background: rgba(35, 36, 27, .98); }
+.leaderboard-list { display: grid; gap: 6px; margin: 14px 0; padding-left: 32px; text-align: left; }
+.leaderboard-list li { padding: 8px 10px; border: 1px solid #665b41; background: #333428; color: #e8ddc0; }
+.leaderboard-list li strong { float: right; color: var(--gold); }
 .room-connect { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 10px; text-align: left; }
 .private-room-controls { display: contents; }
 .room-connect #playerName { grid-column: 1 / -1; }
@@ -137,6 +152,8 @@ h1 em { color: #c39051; font-style: normal; }
   .primary-button { height: 44px; font-size: 12px; letter-spacing: 1px; }
   .controls { display: none; }
   .lobby-panel { padding: 12px; }
+  .account-form { grid-template-columns: 1fr; gap: 6px; }
+  .account-actions { grid-column: auto; }
   .room-connect { grid-template-columns: 1fr auto; gap: 8px 5px; }
   .room-connect .primary-button, .room-connect .secondary-button { min-width: 95px; padding: 0 8px; font-size: 9px; }
   .game-chat { top: 5px; right: 5px; width: min(270px, 76%); }

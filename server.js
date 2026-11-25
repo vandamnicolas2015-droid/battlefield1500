@@ -1,10 +1,20 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const { promisify } = require('util');
+const { Pool } = require('pg');
 const { WebSocketServer, WebSocket } = require('ws');
 
 const PORT = Number(process.env.PORT) || 8080;
 const ROOT = __dirname;
+const SESSION_COOKIE = 'battlefield1500_session';
+const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
+const scrypt = promisify(crypto.scrypt);
+const pool = process.env.DATABASE_URL
+  ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: true }, max: 5 })
+  : null;
+const authAttempts = new Map();
 const FILES = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/index.html': ['index.html', 'text/html; charset=utf-8'],
@@ -12,6 +22,239 @@ const FILES = {
   '/javascript.js': ['javascript.js', 'text/javascript; charset=utf-8'],
   '/robots.txt': ['robots.txt', 'text/plain; charset=utf-8']
 };
+
+function sendJson(response, status, body, headers = {}) {
+  response.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+    ...headers
+  });
+  response.end(JSON.stringify(body));
+}
+
+function readJsonBody(request) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    let tooLarge = false;
+    request.setEncoding('utf8');
+    request.on('data', chunk => {
+      if (tooLarge) return;
+      if (body.length + chunk.length > 4096) {
+        tooLarge = true;
+        return;
+      }
+      body += chunk;
+    });
+    request.on('end', () => {
+      if (tooLarge) {
+        reject(Object.assign(new Error('Request body is too large.'), { status: 413 }));
+        return;
+      }
+      try {
+        resolve(JSON.parse(body));
+      } catch (error) {
+        reject(Object.assign(new Error('Send a valid JSON request.'), { status: 400 }));
+      }
+    });
+    request.on('error', reject);
+  });
+}
+
+function getCookie(request, name) {
+  const cookies = request.headers.cookie || '';
+  for (const cookie of cookies.split(';')) {
+    const separator = cookie.indexOf('=');
+    if (separator < 0) continue;
+    if (cookie.slice(0, separator).trim() === name) return cookie.slice(separator + 1).trim();
+  }
+  return '';
+}
+
+function sessionCookie(token, request) {
+  const secure = request.headers['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production';
+  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DURATION_MS / 1000}${secure ? '; Secure' : ''}`;
+}
+
+function validateRequestOrigin(request) {
+  const origin = request.headers.origin;
+  if (!origin) return true;
+  try {
+    return new URL(origin).host === request.headers.host;
+  } catch (error) {
+    return false;
+  }
+}
+
+function checkAuthRateLimit(request) {
+  const now = Date.now();
+  const forwardedFor = request.headers['x-forwarded-for'];
+  const key = (typeof forwardedFor === 'string' && forwardedFor.split(',')[0].trim()) ||
+    request.socket.remoteAddress || 'unknown';
+  const current = authAttempts.get(key);
+  if (!current || now - current.startedAt >= 15 * 60 * 1000) {
+    authAttempts.set(key, { startedAt: now, count: 1 });
+    return true;
+  }
+  current.count++;
+  if (authAttempts.size > 10000) {
+    for (const [address, attempt] of authAttempts) {
+      if (now - attempt.startedAt >= 15 * 60 * 1000) authAttempts.delete(address);
+    }
+  }
+  return current.count <= 10;
+}
+
+async function findSessionUser(token) {
+  if (!pool || !token || !/^[a-f0-9]{64}$/.test(token)) return null;
+  const tokenHash = crypto.createHash('sha256').update(token).digest();
+  const result = await pool.query(
+    `SELECT users.id, users.username, users.wins
+     FROM game_sessions AS sessions
+     JOIN game_users AS users ON users.id = sessions.user_id
+     WHERE sessions.token_hash = $1 AND sessions.expires_at > NOW()`,
+    [tokenHash]
+  );
+  return result.rows[0] || null;
+}
+
+async function createSession(userId) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest();
+  await pool.query(
+    'INSERT INTO game_sessions (token_hash, user_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL \'30 days\')',
+    [tokenHash, userId]
+  );
+  return token;
+}
+
+async function handleAuthRequest(request, response, pathname) {
+  if (!pool) {
+    sendJson(response, 503, { error: 'Accounts are not available yet. The game database has not been configured.' });
+    return;
+  }
+  if (pathname === '/api/me' && request.method === 'GET') {
+    const user = await findSessionUser(getCookie(request, SESSION_COOKIE));
+    sendJson(response, 200, user
+      ? { authenticated: true, user: { username: user.username, wins: user.wins } }
+      : { authenticated: false });
+    return;
+  }
+  if (pathname === '/api/leaderboard' && request.method === 'GET') {
+    const result = await pool.query(
+      'SELECT username, wins FROM game_users ORDER BY wins DESC, username_norm ASC LIMIT 10'
+    );
+    sendJson(response, 200, { players: result.rows });
+    return;
+  }
+  if (pathname === '/api/logout' && request.method === 'POST') {
+    if (!validateRequestOrigin(request)) {
+      sendJson(response, 403, { error: 'Request origin was not accepted.' });
+      return;
+    }
+    const token = getCookie(request, SESSION_COOKIE);
+    if (token) {
+      const tokenHash = crypto.createHash('sha256').update(token).digest();
+      await pool.query('DELETE FROM game_sessions WHERE token_hash = $1', [tokenHash]);
+    }
+    sendJson(response, 200, { authenticated: false }, {
+      'Set-Cookie': `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${request.headers['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production' ? '; Secure' : ''}`
+    });
+    return;
+  }
+  if ((pathname !== '/api/register' && pathname !== '/api/login') || request.method !== 'POST') {
+    sendJson(response, 404, { error: 'Not found.' });
+    return;
+  }
+  if (!validateRequestOrigin(request)) {
+    sendJson(response, 403, { error: 'Request origin was not accepted.' });
+    return;
+  }
+  if (!checkAuthRateLimit(request)) {
+    sendJson(response, 429, { error: 'Too many sign-in attempts. Try again in 15 minutes.' });
+    return;
+  }
+
+  const body = await readJsonBody(request);
+  const username = typeof body.username === 'string' ? body.username.trim() : '';
+  const usernameNorm = username.toLowerCase();
+  const password = typeof body.password === 'string' ? body.password : '';
+  if (!/^[A-Za-z0-9_]{3,18}$/.test(username)) {
+    sendJson(response, 400, { error: 'Choose a username of 3–18 letters, numbers, or underscores.' });
+    return;
+  }
+  if (password.length < 8 || Buffer.byteLength(password, 'utf8') > 128) {
+    sendJson(response, 400, { error: 'Password must be at least 8 characters and no more than 128 bytes.' });
+    return;
+  }
+
+  let user;
+  if (pathname === '/api/register') {
+    const salt = crypto.randomBytes(16);
+    const passwordHash = await scrypt(password, salt, 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+    try {
+      const result = await pool.query(
+        `INSERT INTO game_users (username, username_norm, password_salt, password_hash)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, username, wins`,
+        [username, usernameNorm, salt, passwordHash]
+      );
+      user = result.rows[0];
+    } catch (error) {
+      if (error.code === '23505') {
+        sendJson(response, 409, { error: 'That username is already taken.' });
+        return;
+      }
+      throw error;
+    }
+  } else {
+    const result = await pool.query(
+      'SELECT id, username, wins, password_salt, password_hash FROM game_users WHERE username_norm = $1',
+      [usernameNorm]
+    );
+    user = result.rows[0];
+    if (!user) {
+      sendJson(response, 401, { error: 'Username or password is incorrect.' });
+      return;
+    }
+    const passwordHash = await scrypt(password, user.password_salt, 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+    if (!crypto.timingSafeEqual(passwordHash, user.password_hash)) {
+      sendJson(response, 401, { error: 'Username or password is incorrect.' });
+      return;
+    }
+  }
+
+  const token = await createSession(user.id);
+  sendJson(response, 200, {
+    authenticated: true,
+    user: { username: user.username, wins: user.wins }
+  }, { 'Set-Cookie': sessionCookie(token, request) });
+}
+
+async function initializeDatabase() {
+  if (!pool) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS game_users (
+      id BIGSERIAL PRIMARY KEY,
+      username TEXT NOT NULL,
+      username_norm TEXT NOT NULL UNIQUE,
+      password_salt BYTEA NOT NULL,
+      password_hash BYTEA NOT NULL,
+      wins INTEGER NOT NULL DEFAULT 0 CHECK (wins >= 0),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS game_sessions (
+      token_hash BYTEA PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES game_users(id) ON DELETE CASCADE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS game_sessions_expiry_idx ON game_sessions (expires_at)');
+  await pool.query('DELETE FROM game_sessions WHERE expires_at <= NOW()');
+}
+
 const mapDefinitions = {
   frontier: {
     name: 'Frontier Field',
@@ -77,7 +320,18 @@ const publicLobby = {
 rooms.set(publicLobby.code, publicLobby);
 
 const server = http.createServer((request, response) => {
-  const file = FILES[request.url.split('?')[0]];
+  const pathname = new URL(request.url, 'http://localhost').pathname;
+  if (pathname.startsWith('/api/')) {
+    handleAuthRequest(request, response, pathname).catch(error => {
+      console.error('Account API request failed:', error.message);
+      if (!response.headersSent) sendJson(response, error.status || 500, {
+        error: error.status ? error.message : 'The account request could not be completed. Try again later.'
+      });
+      else response.destroy(error);
+    });
+    return;
+  }
+  const file = FILES[pathname];
   if (!file || (request.method !== 'GET' && request.method !== 'HEAD')) {
     response.writeHead(404);
     response.end('Not found');
@@ -135,6 +389,7 @@ function addPlayer(room, socket, name) {
   const player = {
     id: String(nextPlayerId++),
     name,
+    accountId: socket.account ? socket.account.id : null,
     slot: room.public ? room.clients.length % 2 : room.clients.length,
     socket,
     x: spawn.x,
@@ -235,9 +490,10 @@ function handleMessage(socket, message) {
       reject(socket, 'Leave your current room first.');
       return;
     }
-    const name = typeof message.name === 'string'
+    const guestName = typeof message.name === 'string'
       ? message.name.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 18)
       : '';
+    const name = socket.account ? socket.account.username : guestName;
     if (!name) {
       reject(socket, 'Enter a player name first.');
       return;
@@ -259,13 +515,11 @@ function handleMessage(socket, message) {
       reject(socket, 'Leave your current room first.');
       return;
     }
-    const name = typeof message.name === 'string'
-      ? message.name.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 18)
-      : '';
-    if (!name) {
-      reject(socket, 'Enter a player name first.');
+    if (!socket.account) {
+      reject(socket, 'Sign in to an account before joining a ranked private battle.');
       return;
     }
+    const name = socket.account.username;
 
     let room;
     if (message.type === 'create') {
@@ -337,16 +591,24 @@ function handleMessage(socket, message) {
   }
 }
 
-webSockets.on('connection', socket => {
+webSockets.on('connection', (socket, request) => {
+  const authenticated = findSessionUser(getCookie(request, SESSION_COOKIE))
+    .then(user => { socket.account = user; })
+    .catch(error => {
+      console.error('Could not verify the WebSocket account session:', error.message);
+      socket.close(1011, 'Account session verification failed.');
+    });
   socket.on('message', data => {
-    let message;
-    try {
-      message = JSON.parse(data.toString());
-    } catch (error) {
-      reject(socket, 'Could not read that message.');
-      return;
-    }
-    handleMessage(socket, message);
+    authenticated.then(() => {
+      let message;
+      try {
+        message = JSON.parse(data.toString());
+      } catch (error) {
+        reject(socket, 'Could not read that message.');
+        return;
+      }
+      handleMessage(socket, message);
+    }).catch(error => console.error('Could not handle WebSocket message:', error.message));
   });
   socket.on('close', () => leaveRoom(socket));
   socket.on('error', error => console.error('WebSocket error:', error.message));
@@ -483,15 +745,35 @@ setInterval(() => {
 
     if (room.timeLeft === 0) {
       room.status = 'finished';
+      const winnerSlot = room.blueScore === room.redScore ? null : room.blueScore > room.redScore ? 0 : 1;
       broadcast(room, {
         type: 'gameOver',
-        winner: room.blueScore === room.redScore ? 'DRAW' : room.blueScore > room.redScore ? 'BLUE WINS' : 'RED WINS'
+        winner: winnerSlot === null ? 'DRAW' : winnerSlot === 0 ? 'BLUE WINS' : 'RED WINS'
       });
+      if (winnerSlot !== null && pool) {
+        const winner = room.clients.find(player => player.slot === winnerSlot);
+        if (winner && winner.accountId) {
+          pool.query('UPDATE game_users SET wins = wins + 1 WHERE id = $1 RETURNING wins', [winner.accountId])
+            .then(result => {
+              if (!result.rows[0]) throw new Error('Winning account no longer exists.');
+              send(winner.socket, { type: 'winRecorded', wins: result.rows[0].wins });
+            })
+            .catch(error => {
+              console.error('Could not save the online match win:', error.message);
+              send(winner.socket, { type: 'notice', text: 'Your win could not be saved to the leaderboard. Please try again later.' });
+            });
+        }
+      }
     }
     broadcast(room, snapshot(room));
   }
 }, 50);
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Battlefield 1500 listening on port ${PORT}`);
+initializeDatabase().then(() => {
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Battlefield 1500 listening on port ${PORT}`);
+  });
+}).catch(error => {
+  console.error('Could not initialize the game database:', error.message);
+  process.exitCode = 1;
 });

@@ -4,9 +4,120 @@ const W = canvas.width;
 const H = canvas.height;
 
 const $ = (id) => document.getElementById(id);
+const PLAYER_NAME_STORAGE_KEY = 'battlefield1500.playerName';
 const menu = $('menu');
 const pauseOverlay = $('pauseOverlay');
 const gameOver = $('gameOver');
+$('playerName').value = loadRememberedPlayerName();
+
+function loadRememberedPlayerName() {
+  try {
+    return localStorage.getItem(PLAYER_NAME_STORAGE_KEY) || '';
+  } catch (error) {
+    console.warn('Could not load the remembered soldier name from browser storage.', error);
+    return '';
+  }
+}
+
+let currentAccount = null;
+let accountStateReady = false;
+
+function renderAccountState(account) {
+  currentAccount = account;
+  $('accountForm').classList.toggle('hidden', Boolean(account));
+  $('logoutButton').classList.toggle('hidden', !account);
+  $('accountUsername').value = account ? account.username : '';
+  $('accountPassword').value = '';
+  $('accountStatus').textContent = account
+    ? `Signed in as ${account.username} — ${account.wins} online wins.`
+    : 'Sign in to save ranked online wins.';
+  if (account) {
+    $('playerName').value = account.username;
+    $('playerName').readOnly = true;
+  } else {
+    $('playerName').readOnly = false;
+  }
+}
+
+async function refreshAccountState() {
+  try {
+    const response = await fetch('/api/me', { credentials: 'same-origin' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not check the account.');
+    renderAccountState(result.authenticated ? result.user : null);
+    accountStateReady = true;
+  } catch (error) {
+    accountStateReady = true;
+    $('accountStatus').textContent = error.message || 'Could not check the account. Try again later.';
+  }
+}
+
+async function submitAccountAction(action) {
+  const username = $('accountUsername').value.trim();
+  const password = $('accountPassword').value;
+  $('accountStatus').textContent = action === 'register' ? 'Creating account...' : 'Signing in...';
+  $('registerButton').disabled = true;
+  $('loginButton').disabled = true;
+  try {
+    const response = await fetch(`/api/${action}`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'The account request failed.');
+    renderAccountState(result.user);
+    $('accountStatus').textContent = `Signed in as ${result.user.username} — ${result.user.wins} online wins.`;
+  } catch (error) {
+    $('accountStatus').textContent = error.message || 'Could not reach the account service. Try again later.';
+  } finally {
+    $('registerButton').disabled = false;
+    $('loginButton').disabled = false;
+  }
+}
+
+async function signOutAccount() {
+  $('logoutButton').disabled = true;
+  try {
+    const response = await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not sign out.');
+    renderAccountState(null);
+    $('playerName').value = loadRememberedPlayerName();
+  } catch (error) {
+    $('accountStatus').textContent = error.message || 'Could not sign out. Try again later.';
+  } finally {
+    $('logoutButton').disabled = false;
+  }
+}
+
+async function loadLeaderboard() {
+  const list = $('leaderboardList');
+  list.replaceChildren();
+  $('leaderboardStatus').textContent = 'Loading leaderboard...';
+  try {
+    const response = await fetch('/api/leaderboard', { credentials: 'same-origin' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not load the leaderboard.');
+    if (result.players.length === 0) {
+      $('leaderboardStatus').textContent = 'No ranked wins yet. Be the first to win a private online battle!';
+      return;
+    }
+    for (const [index, player] of result.players.entries()) {
+      const item = document.createElement('li');
+      const name = document.createElement('span');
+      const wins = document.createElement('strong');
+      name.textContent = `${index + 1}. ${player.username}`;
+      wins.textContent = `${player.wins} ${player.wins === 1 ? 'win' : 'wins'}`;
+      item.append(name, wins);
+      list.append(item);
+    }
+    $('leaderboardStatus').textContent = '';
+  } catch (error) {
+    $('leaderboardStatus').textContent = error.message || 'Could not load the leaderboard. Try again later.';
+  }
+}
 
 let mode = 'bots';
 let running = false;
@@ -815,16 +926,35 @@ function handleOnlineMessage(message) {
     $('winnerText').textContent = message.winner;
     $('finalScore').textContent = `BLUE ${blueScore} — ${redScore} RED`;
     $('gameOver').classList.remove('hidden');
+  } else if (message.type === 'winRecorded') {
+    if (currentAccount) {
+      currentAccount.wins = message.wins;
+      $('accountStatus').textContent = `Signed in as ${currentAccount.username} — ${currentAccount.wins} online wins.`;
+    }
   }
 }
 
-function sendRoomAction(action) {
+async function sendRoomAction(action) {
+  if (!accountStateReady) await refreshAccountState();
   $('connectionError').textContent = '';
-  const name = $('playerName').value.trim();
+  const isPrivateBattle = action.type === 'create' || action.type === 'join';
+  if (isPrivateBattle && !currentAccount) {
+    $('connectionError').textContent = 'Create an account or sign in to play ranked private battles.';
+    $('accountUsername').focus();
+    return;
+  }
+  const name = currentAccount ? currentAccount.username : $('playerName').value.trim();
   if (!name) {
     $('connectionError').textContent = 'Enter a soldier name first.';
     $('playerName').focus();
     return;
+  }
+  if (!currentAccount) {
+    try {
+      localStorage.setItem(PLAYER_NAME_STORAGE_KEY, name);
+    } catch (error) {
+      console.warn('Could not save the remembered guest name.', error);
+    }
   }
   pendingRoomAction = { ...action, name };
   if (socket && socket.readyState === WebSocket.OPEN) {
@@ -911,6 +1041,21 @@ $('botMode').addEventListener('click', () => selectMode('bots'));
 $('localMode').addEventListener('click', () => selectMode('local'));
 $('onlineMode').addEventListener('click', () => selectMode('online'));
 $('publicLobbyMode').addEventListener('click', () => selectMode('public'));
+$('accountForm').addEventListener('submit', event => {
+  event.preventDefault();
+  submitAccountAction('login');
+});
+$('registerButton').addEventListener('click', () => submitAccountAction('register'));
+$('logoutButton').addEventListener('click', signOutAccount);
+$('leaderboardButton').addEventListener('click', () => {
+  menu.classList.add('hidden');
+  $('leaderboardOverlay').classList.remove('hidden');
+  loadLeaderboard();
+});
+$('leaderboardCloseButton').addEventListener('click', () => {
+  $('leaderboardOverlay').classList.add('hidden');
+  menu.classList.remove('hidden');
+});
 $('mapPicker').addEventListener('click', event => {
   const button = event.target.closest('[data-map]');
   if (button) chooseBattleMap(button.dataset.map);
@@ -1067,3 +1212,4 @@ $('touchShoot').addEventListener('lostpointercapture', releaseTouchShoot);
 
 resetMatch();
 draw();
+refreshAccountState();
